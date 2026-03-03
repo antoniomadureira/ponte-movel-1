@@ -1,0 +1,104 @@
+name: Fetch Bridge Status
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # a cada 5 minutos
+  workflow_dispatch:          # permite correr manualmente
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch APDL page
+        run: |
+          curl -s --max-time 15 \
+            -A "Mozilla/5.0 (compatible; PonteMovelBot/1.0)" \
+            "https://siga.apdl.pt/AberturaPonteMovel/" \
+            -o page.html || echo "FETCH_FAILED" > page.html
+
+      - name: Parse state and write JSON
+        run: |
+          python3 << 'EOF'
+          import re, json, datetime, unicodedata, os
+
+          with open('page.html', encoding='utf-8', errors='ignore') as f:
+              html = f.read()
+
+          def normalize(s):
+              s = s.lower()
+              return unicodedata.normalize('NFD', s).encode('ascii', 'ignore').decode()
+
+          STATE_MAP = {
+              'em transito':    'transitavel',
+              'em trânsito':    'transitavel',
+              'transito':       'transitavel',
+              'aberta':         'transitavel',
+              'aberto':         'transitavel',
+              'em preparacao':  'preparacao',
+              'em preparação':  'preparacao',
+              'preparacao':     'preparacao',
+              'a abrir':        'preparacao',
+              'a fechar':       'preparacao',
+              'encerrada':      'encerrada',
+              'encerrado':      'encerrada',
+              'fechada':        'encerrada',
+              'fechado':        'encerrada',
+              'cortada':        'encerrada',
+          }
+
+          state = 'desconhecido'
+          raw   = ''
+
+          # 1. Tentar extrair de <h5>
+          h5_matches = re.findall(r'<h5[^>]*>(.*?)</h5>', html, re.IGNORECASE | re.DOTALL)
+          for m in h5_matches:
+              text = re.sub(r'<[^>]+>', '', m).strip()
+              if not text:
+                  continue
+              n = normalize(text)
+              for key, canonical in STATE_MAP.items():
+                  if normalize(key) in n:
+                      state = canonical
+                      raw   = text
+                      break
+              if state != 'desconhecido':
+                  break
+
+          # 2. Fallback: body completo
+          if state == 'desconhecido':
+              norm_html = normalize(html)
+              for key, canonical in STATE_MAP.items():
+                  if normalize(key) in norm_html:
+                      state = canonical
+                      raw   = key
+                      break
+
+          result = {
+              'state':     state,
+              'raw':       raw,
+              'fetchedAt': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'source':    'https://siga.apdl.pt/AberturaPonteMovel/'
+          }
+
+          with open('status.json', 'w', encoding='utf-8') as f:
+              json.dump(result, f, ensure_ascii=False, indent=2)
+
+          print(f"✓ Estado: {state} | Raw: '{raw}'")
+          EOF
+
+      - name: Commit status.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add status.json
+          # Só faz commit se houver alterações
+          git diff --staged --quiet || git commit -m "chore: update status.json [skip ci]"
+          git push

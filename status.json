@@ -1,6 +1,6 @@
 {
-  "state": "transitavel",
-  "raw": "EM TRÂNSITO",
-  "fetchedAt": "2026-03-05T18:20:26Z",
+  "state": "desconhecido",
+  "raw": "",
+  "fetchedAt": "2026-03-05T19:38:18Z",
   "source": "https://siga.apdl.pt/AberturaPonteMovel/"
 }

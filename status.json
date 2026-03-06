@@ -1,6 +1,6 @@
 {
-  "state": "transitavel",
-  "raw": "A PREPARAR  ABERTURA  AO TRÂNSITO",
-  "fetchedAt": "2026-03-06T23:22:53Z",
+  "state": "desconhecido",
+  "raw": "",
+  "fetchedAt": "2026-03-06T23:46:09Z",
   "source": "https://siga.apdl.pt/AberturaPonteMovel/"
 }
